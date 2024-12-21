@@ -1,0 +1,194 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+## Tidyverse Solo Exercise
+
+In this project, you'll practice working with data using the tidyverse libraries. 
+You'll be working with data on each of 145 school districts and the State of Tennessee. This data contains, for the 2014-2015 school year:
+* Proficiency rates on state tests
+* Student demographics
+* Chronic absenteeism
+* Discipline (suspension, expulsion) rates
+* High school graduation, dropout rates
+* Average ACT composite scores
+* A region in Tennessee  
+
+1. Read in `districts.csv` into a tibble named `districts`.
+```{r}
+districts <- read_csv('../data/districts.csv')
+districts
+```
+2. Notice that the first row corresponds to the whole State of Tennessee. Remove this row and save the result back to `districts`.
+```{r}
+districts <- districts |> 
+  slice(-1)
+districts
+```
+3. How many districts have a proficiency rate of at least 80% for both alg_1 and eng_1?
+```{r}
+districts |> 
+  filter(`alg_1` >= 80, `eng_1` >= 80) |> 
+  count()
+  
+```
+13 districts have a proficiency rate of at least 80% for both alg_1 and eng_1.
+
+4. How many districts have a proficiency rate less than 50% for either alg_1 or eng_1?
+```{r}
+districts |> 
+  filter(`alg_1` < 50 |`eng_1` < 50) |> 
+  count()
+  
+```
+8 districts had a proficiency rate less than 50% for either alg_1 or eng_1.
+
+5. Which district has the lowest graduation rate?
+```{r}
+districts |> 
+  slice_min(`grad`)
+```
+The Tenn School for Blind had the lowest graduation rate at 11.1%.
+
+6. Within the Mid Cumberland region, which district has the highest ACT composite?
+```{r}
+districts |> 
+  filter(`region` == 'Mid Cumberland') |> 
+  slice_max(`act_composite`)
+```
+The district of Williamson County has the highest ACT composite within the Mid Cumberland region, which is 23.8.
+
+7. Create a scatter plot to compare alg_1 proficiency rates to alg_2 rates. What do you notice? Facet this plot by region. Does anything stand out when you facet the plots?
+```{r}
+ggplot(districts, aes(x = alg_1, y = alg_2)) + geom_point()
+```
+```{r}
+ggplot(districts, aes(x = alg_1, y = alg_2)) + geom_point() + facet_wrap(~ `region`)
+```
+According to the first scatterplot of alg_2 vs alg_1, the relationship between the two variables seems to be linear for the most part upon observation, however when the scatterplot of alg_2 vs alg_1 is faceted by region, the scatterplots of a few regions seem to be nonlinear, such as Northwest and Upper Cumberland as well as East Tennessee.
+
+8. When creating this bar chart you may have noticed that some districts have missing enrollment values. For how many districts is this the case?
+```{r}
+ggplot(districts, aes(x = system_name, y = enrollment)) + geom_col()
+```
+```{r}
+districts |> 
+  filter(is.na(`enrollment`) == TRUE) |> 
+  count()
+```
+There are 4 districts that have missing values of enrollment.
+
+9. A lot of rows are missing additional values. Which district has the largest number of missing values (across all variables)? Hint: you might want to look at rowwise and c_across to answer this question.
+```{r}
+districts |> 
+  mutate_all(as.character) |> 
+  rowwise() |> 
+  mutate(m = sum((is.na(c_across())))) |> 
+  ungroup() |> 
+  slice_max(m)
+```
+West Tenn School for Deaf has the most missing values across all variables.
+
+10. What is the mean graduation rate across all districts? What might be wrong with using just the regular mean to assess average graduation rates?
+```{r}
+districts |> 
+  drop_na(grad) |> 
+  pull(grad) |> 
+  mean()
+```
+```{r}
+ggplot(districts, aes(x = `grad`)) + geom_boxplot()
+```
+
+```{r}
+ggplot(districts, aes(x = `grad`)) + geom_histogram()
+```
+```{r}
+ggplot(districts, aes(x = enrollment)) + geom_boxplot()
+```
+```{r}
+ggplot(districts, aes(x = enrollment)) + geom_histogram()
+```
+The mean graduation rate across all districts is around 90%, but since there are extreme outliers in the graduation rate data, these outliers skew the mean graduation rate to the left, possibly making the mean graduation rate calculation an inaccurate representation of the average graduation rate. Also a factor in affecting the mean graduation rate is that each district has greatly varying enrollments, which affects how much weight each district graduation rate contributes to the average rate, and the regular mean does not take this into account.
+
+11. Redo the previous question but use a weighted average (`weighted.mean`) graduation across all districts, weighing by enrollment. How much does this change your answer? Can you explain using the data the reason for the big change from using the mean?
+```{r}
+districts |>
+  drop_na(enrollment) |> 
+  summarise(weighted.mean(`grad`, `enrollment`, na.rm = TRUE))
+  
+```
+```{r}
+ggplot(districts, aes(x = `grad`, y = enrollment)) + geom_point()
+```
+The weighted mean of graduation rates weighted by enrollment is around 87%, which is 3 points lower than the regular mean. The graphs of the data above all show that the enrollment of districts vary greatly across the districts, affecting the weight each district adds to the mean.
+
+12. Find the unweighted and weighted average graduation rate by region.
+```{r}
+districts |> 
+  drop_na(grad, enrollment) |> 
+  group_by(region) |> 
+  summarise(mean_grad = mean(grad), n())
+```
+```{r}
+districts |> 
+  drop_na(enrollment) |> 
+  group_by(region) |> 
+  summarise(weighted_mean_grad = weighted.mean(`grad`, `enrollment`, na.rm = TRUE))
+```
+
+13. Read in the school-level testing data for 2014, available [here](https://www.tn.gov/content/dam/tn/education/data/data_2014_state_base.xlsx). You might find the readxl library useful for this task. If you use this library, be sure to look at the `na` argument for the `read_excel` function.
+```{r}
+library(readxl)
+
+school_data <- read_excel('../data/data_2014_school_base.xlsx', na = "")
+school_data
+```
+14. How many schools have at least 20 percent of students below bsc for Algebra I? Which districts do these schools belong to?
+```{r}
+school_data |> 
+  filter(subgroup == 'All Students') |> 
+  filter(subject == 'Algebra I') |>
+  mutate(pct_below_bsc = as.double(pct_below_bsc)) |> 
+  drop_na(pct_below_bsc) |> 
+  filter(`pct_below_bsc` >= 20) |> 
+  pull(school_name) |>   
+  n_distinct()
+  
+```
+```{r}
+school_data |> 
+  filter(subgroup == 'All Students') |> 
+  filter(subject == 'Algebra I') |>
+  mutate(pct_below_bsc = as.double(pct_below_bsc)) |> 
+  drop_na(pct_below_bsc) |> 
+  filter(`pct_below_bsc` >= 20) |> 
+  pull(system_name) |> 
+  unique()
+```
+There are 171 schools that have at least 20% of students below bsc for Algebra I, and the districts these schools belong to are listed above.
+
+15. How many schools have at least 20 percent of students below bsc for _both_ Algebra I and English I?
+```{r}
+school_data |> 
+  filter(subgroup == 'All Students') |> 
+  filter(subject == 'English I'|subject == 'Algebra I') |>
+  mutate(pct_below_bsc = as.double(pct_below_bsc)) |> 
+  drop_na(pct_below_bsc) |> 
+  filter(`pct_below_bsc` >= 20) |>
+  group_by(school_name) |>
+  filter(n_distinct(subject) == 2) |> 
+  pull(school_name) |> 
+  n_distinct()
+```
+8 schools have at least 20% of students below bsc for both Algebra I and English I
+
+16. Which grade has the highest pct_adv for Algebra I? Plot the average pct_adv per grade level as a bar chart. Make sure that the bars are ordered by grade level.
+```{r}
+
+```
+
